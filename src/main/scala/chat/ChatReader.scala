@@ -3,7 +3,7 @@ package chat
 import akka.actor.typed.receptionist.{Receptionist, ServiceKey}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, Behavior}
-import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
+import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityTypeKey}
 import chat.model.{ChatState, Message}
 import chat.serialization.CborSerializable
 
@@ -25,23 +25,29 @@ object ChatReader {
 
   def apply(chatName: String): Behavior[Command] =
     Behaviors.setup { ctx =>
-      // TODO register
+      ctx.system.receptionist ! Receptionist.Register(serviceKey(chatName), ctx.self)
+
+      val writer = ClusterSharding(ctx.system).entityRefFor(ChatWriter.typeKey, chatName)
+      writer ! ChatWriter.GetState(ctx.self)
 
       def inner(subscribers: Set[ActorRef[Notification]], state: ChatState): Behavior[Command] =
         Behaviors.receiveMessage {
           case Subscribe(subscriber) =>
-            // TODO send latest
-            // TODO watch
-            ???
+            subscriber ! LatestMessages(state.messages.lastN)
+            ctx.watchWith(subscriber, Unsubscribe(subscriber))
+            inner(subscribers + subscriber, state)
+
           case Unsubscribe(subscriber) =>
-            // TODO
-            ???
+            inner(subscribers - subscriber, state)
+
           case UpdateState(state) =>
-            // TODO
-            ???
+            subscribers.foreach(_ ! LatestMessages(state.messages.lastN))
+            inner(subscribers, state)
+
           case ProcessMessage(message, state) =>
-            // TODO
-            ???
+            subscribers.foreach(_ ! ChatMessage(message))
+            inner(subscribers, state)
+
           case Stop =>
             Behaviors.stopped
         }

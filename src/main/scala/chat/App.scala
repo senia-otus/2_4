@@ -30,7 +30,7 @@ class MessageSender(writer: EntityRef[ChatWriter.Command])(implicit system: Acto
       } *> ZIO.unit
 
     trySend(Message(UUID.randomUUID(), text, Instant.now()))
-//      .retry(Schedule.spaced(5.second).untilOutput(_ > 100))
+      .retry(Schedule.spaced(5.second).untilOutput(_ > 100))
   }
 
   def spamMessages(count: Int)(text: Int => String): RIO[Env, Unit] = {
@@ -70,7 +70,7 @@ case class App(system: ActorSystem[SystemCommand], runtime: Runtime[Clock]) {
     }
 
   def spamToAll(): Unit = {
-    runtime.unsafeRun(spamToChats(1000, 10)(chat => msg => s"Init. Chat: $chat; Message: $msg"))
+    runtime.unsafeRun(spamToChats(200, 1000)(chat => msg => s"Init. Chat: $chat; Message: $msg"))
   }
 
   def sendSlow(): Unit = {
@@ -115,8 +115,10 @@ object App {
 
     val sharding = ClusterSharding(system)
 
-    // TODO init reader
-    // TODO init writer
+    sharding.init(
+      Entity(ChatReader.typeKey)(ctx => ChatReader(ctx.entityId)).withStopMessage(ChatReader.Stop)
+    )
+    sharding.init(Entity(ChatWriter.typeKey)(ctx => ChatWriter(ctx.entityId)))
 
     App(system, Runtime.default)
   }

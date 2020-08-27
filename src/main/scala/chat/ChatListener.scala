@@ -18,9 +18,17 @@ object ChatListener {
 
   def apply(chatName: String): Behavior[Command] =
     Behaviors.setup[Command] { ctx =>
-      // TODO (2) subscribe to ChatReader update
+      val listing   = ctx.messageAdapter[Receptionist.Listing](Listing)
+      val readerKey = ChatReader.serviceKey(chatName)
+      ctx.system.receptionist ! Receptionist.Subscribe(readerKey, listing)
 
-      // TODO subscribe to ChatReader
+      val reader = ctx.messageAdapter[ChatReader.Notification] {
+        case ChatReader.LatestMessages(messages) => ProcessLatestMessages(messages)
+        case ChatReader.ChatMessage(message)     => ProcessMessage(message)
+      }
+
+      val readerRef = ClusterSharding(ctx.system).entityRefFor(ChatReader.typeKey, chatName)
+      readerRef ! ChatReader.Subscribe(reader)
 
       Behaviors.receiveMessage {
         case ProcessLatestMessages(messages) =>
@@ -29,7 +37,9 @@ object ChatListener {
         case ProcessMessage(message) =>
           ctx.log.info(s"Received message $message")
           Behaviors.same
-        // TODO update
+        case Listing(listing) =>
+          listing.serviceInstances(readerKey).foreach(_ ! ChatReader.Subscribe(reader))
+          Behaviors.same
         case Stop => Behaviors.stopped
       }
     }
