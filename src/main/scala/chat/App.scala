@@ -115,9 +115,8 @@ object App {
 
     val sharding = ClusterSharding(system)
 
-    sharding.init(Entity(ChatReader.typeKey)(entityContext => ChatReader(entityContext.entityId)))
-
-    sharding.init(Entity(ChatWriter.typeKey)(ctx => ChatWriter(ctx.entityId)))
+    // TODO init reader
+    // TODO init writer
 
     App(system, Runtime.default)
   }
